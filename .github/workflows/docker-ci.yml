@@ -1,0 +1,49 @@
+name: Docker CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test -- --watchAll=false
+
+      - name: Build Docker image
+        run: docker build -t multi-select-app:test .
+
+      - name: Verify Docker image
+        run: |
+          # Run the Docker image
+          docker run -d -p 3000:80 --name multi-select-container multi-select-app:test
+
+          # Wait for container to be healthy
+          echo "Waiting for container to start..."
+          sleep 10
+
+          # Check if container is running
+          if [ "$(docker inspect -f {{.State.Running}} multi-select-container)" != "true" ]; then
+            echo "Container is not running!"
+            docker logs multi-select-container
+            exit 1
+          fi
+
+          # Clean up
+          docker stop multi-select-container
+          docker rm multi-select-container
